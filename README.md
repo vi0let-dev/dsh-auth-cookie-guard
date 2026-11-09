@@ -104,7 +104,7 @@ dsh-auth-cookie-guard/
 ├── locale/{zh,en}.json             # 插件管理器显示名与描述
 ├── icon.svg                        # 原创图标
 ├── scripts/purge-auth-cookies.mjs  # 打不开时的一次性救援
-├── test/                           # 4 组测试，共 36 项
+├── test/                           # 4 组测试，共 38 项
 ├── README.md / AUDIT.md / LICENSE
 ```
 
@@ -131,7 +131,7 @@ dsh-auth-cookie-guard/
 ## 开发说明
 
 ```powershell
-# 全部测试（36 项：纯函数 / 路由 / SQLite 救援 / Client 注册）
+# 全部测试（38 项：纯函数 / 路由 / SQLite 救援 / Client 注册）
 node test/run-all.mjs
 
 # 语法检查

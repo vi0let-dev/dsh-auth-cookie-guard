@@ -11,6 +11,14 @@
 
 需要明确的是：**本报告只覆盖代码与仓库层面，不构成"插件在真机运行正常"的证明**。真机验证项见第 6 节。
 
+## 1.1 0.1.1 修复记录（真机反馈）
+
+真机安装 0.1.0 后，设置页停在「正在读取状态…」「刷新中…」，`GET /api/dsh-auth-cookie-guard/status` 永不返回。
+
+- **根因**：路由以 `handler` 形态注册（`{ kind, path, handler }`）。web 服务对 handler 路由按 Node 约定调用 `handler(req, res)`，响应必须由 handler 自己写完；而实现返回的是 `Response` 对象。返回值被丢弃、没有人调用 `res.end()`，连接就一直挂着。返回值不是异常，服务的 `catch` 也不会触发，所以表现为"无错误、无响应"。
+- **修复**：改为 `resource` 形态注册（`{ kind, path, resource }`），由 web 服务把 `Response` 写回并按行转发 `set-cookie`；同时给资源函数加顶层 `try/catch`，意外异常返回 500，避免再次出现悬空连接。
+- **为什么之前没测出来**：旧测试直接调用资源函数并断言返回的 `Response`，没有覆盖"注册形态"这一契约；真机才暴露。现已补两项回归：注册对象必须含 `resource` 且不含 `handler`；用真实 `node:http` 服务端到端验证 200 + 两条 `Set-Cookie`。
+
 ## 2. 自动扫描
 
 执行：
@@ -31,6 +39,8 @@ node <plugin-builder>/scripts/audit-scan.mjs <项目目录>
 | 位置 | 规则 | 处理 |
 |---|---|---|
 | `test/sqlite.test.mjs` | `absolute-win-user-path` | 原为一条带用户名段的 Windows 绝对路径示例，改为 `path.join('C:\\', 'AppData', 'Roaming')` 构造，不再包含用户名 |
+
+0.1.1 复扫另有一条提示：`test/route.test.mjs` 里的 `http://127.0.0.1:<port>` 属测试专用回环地址（起一个本地 `node:http` 服务，端到端验证 `set-cookie` 能被转发），不是生产出口、不对外通信，已人工确认接受。
 
 ## 3. 人工审计清单
 
@@ -71,7 +81,7 @@ node <plugin-builder>/scripts/audit-scan.mjs <项目目录>
 
 **已实际运行并通过**
 
-- `node test/run-all.mjs` → 36 项全部通过（纯函数 14、Host 路由 9、SQLite 救援 9、Client 注册 4）
+- `node test/run-all.mjs` → 38 项全部通过（纯函数 14、Host 路由 11、SQLite 救援 9、Client 注册 4）
 - `node --check` 对全部 `.js` / `.mjs` 通过
 - `check-project.mjs` → 通过 22、失败 0、提示 2（提示为 ESM 语法需自行校验与 README 缺失，均已补齐）
 - `audit-scan.mjs` → 高危 0、中危 0、提示 0

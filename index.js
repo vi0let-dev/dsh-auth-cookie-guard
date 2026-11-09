@@ -62,7 +62,7 @@ export function apply(ctx, config = {}) {
   const settings = normalizeSettings(config)
   const state = { last: null, purges: 0, purgedTotal: 0 }
   const runtime = { server: undefined }
-  const handler = createHandler({ runtime, settings, state, logger: ctx.logger })
+  const resource = createHandler({ runtime, settings, state, logger: ctx.logger })
 
   // webServer is published by the browser composition, which may activate
   // after this plugin; ctx.inject waits for it and re-registers if replaced.
@@ -71,8 +71,11 @@ export function apply(ctx, config = {}) {
       scoped?.webServer ?? (typeof scoped?.get === 'function' ? scoped.get('webServer') : undefined)
     if (server === undefined || server === null || typeof server.register !== 'function') return
     runtime.server = server
+    // `resource`, not `handler`: a handler route is called as `(req, res)` and
+    // must write the response itself, while a resource route gets a Request and
+    // returns a Response, which is what lets `set-cookie` reach the browser.
     scoped.effect(
-      () => server.register({ kind: 'prefix', path: ROUTE_PREFIX, handler }),
+      () => server.register({ kind: 'prefix', path: ROUTE_PREFIX, resource }),
       'dsh-auth-cookie-guard: routes',
     )
   })
@@ -84,13 +87,13 @@ export function apply(ctx, config = {}) {
  *   runtime: { server?: { getOrigin?: () => string } },
  *   settings: { enabled: boolean, dryRun: boolean, warnAt: number },
  *   state: { last: object | null, purges: number, purgedTotal: number },
- *   logger?: { info?: (message: string) => void },
+ *   logger?: { info?: (message: string) => void, warn?: (message: string) => void },
  *   now?: () => Date,
  * }} input - handler dependencies.
- * @returns {(request: Request) => Promise<Response>} the resource handler.
+ * @returns {(request: Request) => Promise<Response>} the resource function.
  */
 export function createHandler({ runtime, settings, state, logger, now = () => new Date() }) {
-  return async function handle(request) {
+  async function respond(request) {
     let url
     try {
       url = new URL(request.url)
@@ -179,6 +182,19 @@ export function createHandler({ runtime, settings, state, logger, now = () => ne
       },
       headers,
     )
+  }
+
+  // A resource that throws would reject the server's write and leave the socket
+  // open, so the failure is answered here instead of escaping.
+  return async function handle(request) {
+    try {
+      return await respond(request)
+    } catch (error) {
+      logger?.warn?.(
+        `dsh-auth-cookie-guard: route failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+      return jsonResponse(500, { ok: false, error: 'internal-error' })
+    }
   }
 }
 

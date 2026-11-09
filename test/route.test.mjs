@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { createServer } from 'node:http'
 
 import {
   CLIENT_HEADER,
   ROUTE_PREFIX,
+  apply,
   createHandler,
   jsonResponse,
   requestFence,
@@ -181,4 +183,69 @@ test('jsonResponse keeps each deletion cookie on its own line', async () => {
   assert.equal(response.status, 200)
   assert.deepEqual(response.headers.getSetCookie(), ['a=; Max-Age=0; Path=/', 'b=; Max-Age=0; Path=/'])
   assert.equal(response.headers.get('cache-control'), 'no-store')
+})
+
+test('apply registers a resource route, never a handler route', () => {
+  const registered = []
+  const ctx = {
+    logger: { info() {}, warn() {} },
+    inject: (dependencies, callback) => {
+      callback({
+        webServer: {
+          getOrigin: () => ORIGIN,
+          register: (route) => {
+            registered.push(route)
+            return () => {}
+          },
+        },
+        effect: (fn) => {
+          fn()
+          return () => {}
+        },
+      })
+    },
+  }
+
+  apply(ctx, {})
+
+  assert.equal(registered.length, 1)
+  const route = registered[0]
+  assert.equal(route.kind, 'prefix')
+  assert.equal(route.path, ROUTE_PREFIX)
+  assert.equal(typeof route.resource, 'function')
+  // A handler route is called as (req, res) and must end the response itself;
+  // returning a Response there leaves the socket open forever.
+  assert.equal(route.handler, undefined)
+})
+
+test('the resource answers a real HTTP request with deletion headers', async () => {
+  const { handler } = makeHandler()
+  const server = createServer(async (req, res) => {
+    const target = new URL(req.url ?? '/', `http://${req.headers.host ?? '127.0.0.1'}`)
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (Array.isArray(value)) headers.set(name, value.join(', '))
+      else if (value !== undefined) headers.set(name, value)
+    }
+    const response = await handler(new Request(target, { headers }))
+    const outgoing = Object.fromEntries(response.headers)
+    const cookies = response.headers.getSetCookie()
+    if (cookies.length > 0) outgoing['set-cookie'] = cookies
+    res.writeHead(response.status, outgoing)
+    res.end(await response.text())
+  })
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const address = server.address()
+    const response = await fetch(`http://127.0.0.1:${address.port}${ROUTE_PREFIX}/purge`, {
+      headers: { [CLIENT_HEADER]: '1', cookie: COOKIE_HEADER },
+    })
+    assert.equal(response.status, 200)
+    assert.equal(response.headers.getSetCookie().length, 2)
+    const body = await response.json()
+    assert.equal(body.purge.deleted, 2)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+  }
 })
