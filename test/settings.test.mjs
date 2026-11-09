@@ -115,6 +115,17 @@ test('POST validates and persists a full settings patch', async () => {
   assert.deepEqual(settings, { enabled: false, dryRun: true, warnAt: 12 })
 })
 
+test('the shipped defaults are accepted as an explicit patch', async () => {
+  const editor = makeEditor()
+  const { res, settings } = await run({
+    editor,
+    request: { method: 'POST', body: JSON.stringify({ enabled: true, dryRun: false, warnAt: 40 }) },
+  })
+  assert.equal(res.status, 200)
+  assert.deepEqual(settings, START)
+  assert.deepEqual(editor.calls[0].next, START)
+})
+
 test('POST rejects an unknown key', async () => {
   const editor = makeEditor()
   const { res } = await run({

@@ -29,6 +29,13 @@
 - **权限面**：写路由与其它路由同样受 loopback `Host` + 同源标记头两道栅栏约束；跨站请求无法触发配置写入。
 - **回归**：新增 15 项测试（纯函数 4、设置保存 11），总数 38 → 53。
 
+## 1.3 0.2.1 变更（恢复默认）
+
+- 设置页的「撤销修改」替换为「恢复默认」：点击即以插件初始默认（`enabled: true`、`dryRun: false`、`warnAt: 40`）调用同一个已校验的保存端点。
+- 默认值由 Host 在 `/status` 的 `defaults` 字段下发，前端不硬编码，避免与包内默认漂移。
+- 写回值与包内默认一致时，`configEditor` 会删除 profile 覆盖行，配置回落到包内默认，而不是留下一条"等于默认"的覆盖。
+- 新增 1 项测试（默认值可作为显式 patch 保存），总数 53 → 54；审计结论与权限面不变（仍是三个白名单键 + 同一栅栏）。
+
 ## 2. 自动扫描
 
 执行：
@@ -92,7 +99,7 @@ node <plugin-builder>/scripts/audit-scan.mjs <项目目录>
 
 **已实际运行并通过**
 
-- `node test/run-all.mjs` → 53 项全部通过（纯函数 18、Host 路由 11、设置保存 11、SQLite 救援 9、Client 注册 4）
+- `node test/run-all.mjs` → 54 项全部通过（纯函数 18、Host 路由 11、设置保存 12、SQLite 救援 9、Client 注册 4）
 - `node --check` 对全部 `.js` / `.mjs` 通过
 - `check-project.mjs` → 通过 22、失败 0、提示 2（提示为 ESM 语法需自行校验与 README 缺失，均已补齐）
 - `audit-scan.mjs` → 高危 0、中危 0、提示 0

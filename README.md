@@ -83,6 +83,7 @@ node scripts/purge-auth-cookies.mjs --dry-run
 - `warnAt` 必须是 1–500 的整数，非法值会被服务端拒绝并提示，不会静默写入；
 - 保存只接受这三个键，其它字段一律 400（页面拿不到写任意配置的能力）；
 - 保存会触发该插件行重新加载，路由随之重新注册，页面随后会自动刷新状态；
+- 「恢复默认」把三项一键写回插件初始默认（开启 / 非试运行 / 40 枚）；写回值与包内默认一致时，`configEditor` 会直接移除 profile 层的覆盖行，等价于回到初始配置；
 - 若某个 profile 没有提供 `configEditor`（非 Web/精简组合），页面显示"无法保存"的提示，此时仍可手改 profile 的 `cordis.patch.yml`。
 
 `cordis.patch.yml` 里的 `config` 依然有效，作为**默认值**；一旦在页面保存过，profile 层会覆盖它。页面上的「立即清理」不受 `enabled` / `dryRun` 限制（这是显式操作）。
@@ -101,7 +102,7 @@ dsh-auth-cookie-guard/
 ├── locale/{zh,en}.json             # 插件管理器显示名与描述
 ├── icon.svg                        # 原创图标
 ├── scripts/purge-auth-cookies.mjs  # 打不开时的一次性救援
-├── test/                           # 5 组测试，共 53 项
+├── test/                           # 5 组测试，共 54 项
 ├── README.md / AUDIT.md / LICENSE
 ```
 
@@ -129,7 +130,7 @@ dsh-auth-cookie-guard/
 ## 开发说明
 
 ```powershell
-# 全部测试（53 项：纯函数 / 路由 / 设置保存 / SQLite 救援 / Client 注册）
+# 全部测试（54 项：纯函数 / 路由 / 设置保存 / SQLite 救援 / Client 注册）
 node test/run-all.mjs
 
 # 语法检查

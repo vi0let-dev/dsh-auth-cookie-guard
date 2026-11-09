@@ -58,7 +58,8 @@ window.__ModuleLoader__.load({
         save: '保存',
         saving: '保存中…',
         saved: '配置已保存。',
-        reset: '撤销修改',
+        restoreDefaults: '恢复默认',
+        restored: '已恢复默认配置。',
         dirty: '有未保存的修改。',
         invalidWarnAt: '告警阈值需要是 1–500 之间的整数。',
         saveFailed: '保存失败：{message}',
@@ -116,7 +117,8 @@ window.__ModuleLoader__.load({
         save: 'Save',
         saving: 'Saving…',
         saved: 'Settings saved.',
-        reset: 'Discard changes',
+        restoreDefaults: 'Restore defaults',
+        restored: 'Defaults restored.',
         dirty: 'Unsaved changes.',
         invalidWarnAt: 'The threshold must be an integer between 1 and 500.',
         saveFailed: 'Save failed: {message}',
@@ -322,9 +324,8 @@ window.__ModuleLoader__.load({
           draft.dryRun !== (snapshot.settings.dryRun === true) ||
           draft.warnAt !== String(snapshot.settings.warnAt))
 
-      const save = useCallback(async () => {
-        if (draft === null) return
-        const warnAt = Number.parseInt(draft.warnAt, 10)
+      const persist = useCallback(async (nextDraft, noteKey) => {
+        const warnAt = Number.parseInt(nextDraft.warnAt, 10)
         if (!Number.isInteger(warnAt) || warnAt < 1 || warnAt > 500) {
           setSaveError(t('invalidWarnAt'))
           return
@@ -335,12 +336,12 @@ window.__ModuleLoader__.load({
         try {
           const result = await request('/settings', {
             method: 'POST',
-            body: JSON.stringify({ enabled: draft.enabled, dryRun: draft.dryRun, warnAt }),
+            body: JSON.stringify({ enabled: nextDraft.enabled, dryRun: nextDraft.dryRun, warnAt }),
           })
           if (!result.ok || !result.data || result.data.ok !== true) {
             throw new Error(result.data?.message ?? `HTTP ${String(result.status)}`)
           }
-          setSavedNote(t('saved'))
+          setSavedNote(t(noteKey))
           // The save reloads this plugin row, so re-reading /status right away
           // could race the route being registered again; use the reply instead.
           setSnapshot((previous) =>
@@ -359,18 +360,21 @@ window.__ModuleLoader__.load({
         } finally {
           setSaving(false)
         }
-      }, [draft, t])
+      }, [t])
 
-      const reset = useCallback(() => {
-        if (!snapshot?.settings) return
-        setDraft({
-          enabled: snapshot.settings.enabled === true,
-          dryRun: snapshot.settings.dryRun === true,
-          warnAt: String(snapshot.settings.warnAt),
-        })
-        setSaveError('')
-        setSavedNote('')
-      }, [snapshot, t])
+      const save = useCallback(() => persist(draft, 'saved'), [draft, persist])
+
+      const restoreDefaults = useCallback(() => {
+        const defaults = snapshot?.defaults
+        if (!defaults) return
+        const next = {
+          enabled: defaults.enabled === true,
+          dryRun: defaults.dryRun === true,
+          warnAt: String(defaults.warnAt),
+        }
+        setDraft(next)
+        return persist(next, 'restored')
+      }, [persist, snapshot])
 
       useEffect(() => {
         load()
@@ -544,9 +548,9 @@ window.__ModuleLoader__.load({
                 h('button', {
                   type: 'button',
                   className: 'dacg-btn dacg-btn-ghost',
-                  onClick: reset,
-                  disabled: saving || dirty !== true,
-                }, t('reset')),
+                  onClick: restoreDefaults,
+                  disabled: saving || snapshot.editable !== true,
+                }, t('restoreDefaults')),
               ),
 
               savedNote !== ''

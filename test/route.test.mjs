@@ -68,6 +68,7 @@ test('GET /status reports the carried cookies and never deletes', async () => {
   assert.ok(body.headerBytes > 0)
   assert.equal(body.risk, 'safe')
   assert.equal(body.settings.enabled, true)
+  assert.deepEqual(body.defaults, { enabled: true, dryRun: false, warnAt: 40 })
   assert.equal(state.last, null)
 })
 

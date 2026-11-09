@@ -33,6 +33,7 @@
  */
 
 import {
+  DEFAULT_SETTINGS,
   HEADER_BUDGET_BYTES,
   SettingsInputError,
   cookieNameForAuthority,
@@ -294,6 +295,7 @@ function buildSnapshot({ origin, plan, settings, state, at, editable = false }) 
     risk,
     skipped: plan.skipped,
     settings: { enabled: settings.enabled, dryRun: settings.dryRun, warnAt: settings.warnAt },
+    defaults: { ...DEFAULT_SETTINGS },
     editable: editable === true,
     last: state.last,
     totals: { purges: state.purges, purged: state.purgedTotal },
