@@ -44,9 +44,11 @@ Error: desktop welcome: Web authentication failed
 2. **手动**：设置 →「认证 Cookie 守卫」→「立即清理」。
 3. **看状态**：「上次请求携带 N 枚认证 Cookie（其中过期 M 枚）」——这个 N 就是决定会不会出事的指标，健康值应当长期是 1～2。
 
-> 安装命令（示例，未由本仓库执行）：
-> `dsh plugin --profile desktop add <本目录绝对路径>`
-> 或在插件管理页选择本地目录安装。安装后需重启 DSH 才会加载新的 JS 模块。
+> 安装（二选一，本仓库不代你执行）：
+> - GitHub：`dsh plugin --profile desktop add github:vi0let-dev/dsh-auth-cookie-guard`
+> - 本地目录：`dsh plugin --profile desktop add <本目录绝对路径>`
+>
+> 也可以在插件管理页添加。安装后需重启 DSH 才会加载新的 JS 模块。
 
 ### 已经打不开桌面版了
 
