@@ -1,0 +1,55 @@
+{
+  "name": "dsh-auth-cookie-guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "自动清理 DSH 桌面版累积的 dsh-auth-* 认证 Cookie，避免请求头超限导致的启动失败（Web authentication failed）。",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./core": "./core.mjs",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "core.mjs",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "scripts/purge-auth-cookies.mjs",
+    "README.md",
+    "AUDIT.md",
+    "LICENSE"
+  ],
+  "icon": "./icon.svg",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cookie",
+    "desktop",
+    "startup"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "scripts": {
+    "test": "node test/run-all.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "license": "MIT"
+}

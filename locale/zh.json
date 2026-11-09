@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "认证 Cookie 守卫",
+    "description": "自动清理桌面版累积的 dsh-auth-* 认证 Cookie，避免请求头超限导致的启动失败。"
+  }
+}

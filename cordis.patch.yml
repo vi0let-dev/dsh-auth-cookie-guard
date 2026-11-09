@@ -1,0 +1,19 @@
+# dsh-auth-cookie-guard —— bundle patch。
+#
+# 三处名字必须一致，改一处就要全改：
+#   1. package.json 的 "name"
+#   2. 下面这条 insert 的 "name"
+#   3. client.js 里 __ModuleLoader__.load 的 "id"
+#
+# 行 id 与包名保持一致；config 交给 index.js 的 normalizeSettings 兜底校验，
+# 因此这里只需要写用户可调的三个键：
+#   enabled  自动清理开关（默认 true）
+#   dryRun   只报告、不真正下发过期 Cookie（默认 false，用于观察）
+#   warnAt   设置页开始告警的认证 Cookie 条数（默认 40）
+- insert:
+    - id: dsh-auth-cookie-guard
+      name: 'dsh-auth-cookie-guard'
+      config:
+        enabled: true
+        dryRun: false
+        warnAt: 40

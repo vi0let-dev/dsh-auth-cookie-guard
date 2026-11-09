@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Auth Cookie Guard",
+    "description": "Prunes accumulated dsh-auth-* cookies in the Desktop app so an oversized Cookie header can no longer break startup."
+  }
+}
