@@ -2,7 +2,7 @@
 
 - 审计日期：2026-11-09
 - 版本：0.1.0（未安装、未发布）
-- 审计对象：`dsh-auth-cookie-guard/` 全部 20 个受版本控制的文件
+- 审计对象：`dsh-auth-cookie-guard/` 全部 21 个受版本控制的文件
 - 扫描工具：`plugin-builder/scripts/audit-scan.mjs`、`plugin-builder/scripts/check-project.mjs`、`node --check`
 
 ## 1. 结论

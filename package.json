@@ -1,6 +1,6 @@
 {
   "name": "dsh-auth-cookie-guard",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "自动清理 DSH 桌面版累积的 dsh-auth-* 认证 Cookie，避免请求头超限导致的启动失败（Web authentication failed）。",
@@ -20,6 +20,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "docs/banner.png",
     "scripts/purge-auth-cookies.mjs",
     "README.md",
     "AUDIT.md",

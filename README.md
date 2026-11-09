@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/banner.png" alt="dsh-auth-cookie-guard — 认证 Cookie 守卫" width="100%" />
+</p>
+
 # dsh-auth-cookie-guard
 
 DSH（DeepSeek Harness）桌面版插件。它解决的是这个具体故障：
@@ -102,6 +106,7 @@ dsh-auth-cookie-guard/
 ├── locale/{zh,en}.json             # 插件管理器显示名与描述
 ├── icon.svg                        # 原创图标
 ├── scripts/purge-auth-cookies.mjs  # 打不开时的一次性救援
+├── docs/banner.png                 # README 顶部横幅
 ├── test/                           # 5 组测试，共 54 项
 ├── README.md / AUDIT.md / LICENSE
 ```
