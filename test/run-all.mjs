@@ -7,5 +7,6 @@
 
 import './core.test.mjs'
 import './route.test.mjs'
+import './settings.test.mjs'
 import './sqlite.test.mjs'
 import './client.test.mjs'

@@ -2,7 +2,7 @@
 
 - 审计日期：2026-11-09
 - 版本：0.1.0（未安装、未发布）
-- 审计对象：`dsh-auth-cookie-guard/` 全部 17 个受版本控制的文件
+- 审计对象：`dsh-auth-cookie-guard/` 全部 20 个受版本控制的文件
 - 扫描工具：`plugin-builder/scripts/audit-scan.mjs`、`plugin-builder/scripts/check-project.mjs`、`node --check`
 
 ## 1. 结论
@@ -18,6 +18,16 @@
 - **根因**：路由以 `handler` 形态注册（`{ kind, path, handler }`）。web 服务对 handler 路由按 Node 约定调用 `handler(req, res)`，响应必须由 handler 自己写完；而实现返回的是 `Response` 对象。返回值被丢弃、没有人调用 `res.end()`，连接就一直挂着。返回值不是异常，服务的 `catch` 也不会触发，所以表现为"无错误、无响应"。
 - **修复**：改为 `resource` 形态注册（`{ kind, path, resource }`），由 web 服务把 `Response` 写回并按行转发 `set-cookie`；同时给资源函数加顶层 `try/catch`，意外异常返回 500，避免再次出现悬空连接。
 - **为什么之前没测出来**：旧测试直接调用资源函数并断言返回的 `Response`，没有覆盖"注册形态"这一契约；真机才暴露。现已补两项回归：注册对象必须含 `resource` 且不含 `handler`；用真实 `node:http` 服务端到端验证 200 + 两条 `Set-Cookie`。
+
+## 1.2 0.2.0 变更（配置可编辑）
+
+设置页的 `enabled` / `dryRun` / `warnAt` 从只读改成可切换、可保存。
+
+- **写入路径**：新增精确 handler 路由 `POST /api/dsh-auth-cookie-guard/settings`（resource 路由只接受 GET/HEAD，读不到请求体），服务端用 DSH 的 `configEditor` 把配置写进当前 profile 的 `cordis.patch.yml` 并让 Loader 立即生效；插件本身不直接写文件。
+- **输入边界**：只接受三个白名单键，布尔必须是布尔、`warnAt` 必须是 1–500 的整数，未知键、空 body、非法 JSON、超长 body 一律 400；没有 `configEditor` 的组合返回 501 且不改动任何状态。
+- **失败语义**：`configEditor` 抛错时返回 500，内存配置保持原值，不产生半保存状态。
+- **权限面**：写路由与其它路由同样受 loopback `Host` + 同源标记头两道栅栏约束；跨站请求无法触发配置写入。
+- **回归**：新增 15 项测试（纯函数 4、设置保存 11），总数 38 → 53。
 
 ## 2. 自动扫描
 
@@ -55,7 +65,8 @@ node <plugin-builder>/scripts/audit-scan.mjs <项目目录>
 | 注入 | 无 `eval` / `new Function` / `innerHTML` / 动态 HTML 拼接；SQL 使用参数绑定（`?`），无字符串拼接 |
 | 命令执行 | 无 `child_process`、无 shell 调用 |
 | 权限面 | 只使用 `webServer.register` / `getOrigin` 与 Client 的 `slots`、`locale`；未申请凭据、审批、沙箱绕过或文件服务 |
-| 路由暴露面 | 带 loopback `Host` 栅栏 + 同源自定义头栅栏（防 DNS rebinding / 跨站触发）；仅 GET/HEAD |
+| 路由暴露面 | 带 loopback `Host` 栅栏 + 同源自定义头栅栏（防 DNS rebinding / 跨站触发）；GET/HEAD 走 resource，`POST /settings` 走 handler |
+| 配置写入 | 只接受 `enabled`/`dryRun`/`warnAt` 三个白名单键并做类型校验；通过 `configEditor` 写入 profile 的 patch 层，插件不自行写文件；无 `configEditor` 时 501 且不落盘 |
 | 依赖 | 运行期零第三方依赖；救援脚本仅用 `node:sqlite` 内置模块。无 postinstall、无安装脚本 |
 | 发布面 | `.gitignore` 覆盖 `node_modules`、`.env`、日志、测试临时目录；无构建产物、无本地绝对路径、无截图中的敏感信息 |
 | 卸载残留 | 无自有数据；仅可能留下救援脚本生成的 `Cookies.dsh-cookie-guard-*.bak`，已在 README 写明 |
@@ -81,7 +92,7 @@ node <plugin-builder>/scripts/audit-scan.mjs <项目目录>
 
 **已实际运行并通过**
 
-- `node test/run-all.mjs` → 38 项全部通过（纯函数 14、Host 路由 11、SQLite 救援 9、Client 注册 4）
+- `node test/run-all.mjs` → 53 项全部通过（纯函数 18、Host 路由 11、设置保存 11、SQLite 救援 9、Client 注册 4）
 - `node --check` 对全部 `.js` / `.mjs` 通过
 - `check-project.mjs` → 通过 22、失败 0、提示 2（提示为 ESM 语法需自行校验与 README 缺失，均已补齐）
 - `audit-scan.mjs` → 高危 0、中危 0、提示 0

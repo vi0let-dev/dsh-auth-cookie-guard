@@ -6,8 +6,10 @@ import {
   COOKIE_NAME_RE,
   COOKIE_PREFIX,
   DEFAULT_SETTINGS,
+  EDITABLE_SETTING_KEYS,
   HEADER_BUDGET_BYTES,
   MAX_PURGE_PER_RESPONSE,
+  SettingsInputError,
   authorityFromOrigin,
   cookieNameForAuthority,
   estimateHeaderBytes,
@@ -17,6 +19,7 @@ import {
   planPurge,
   riskOf,
   serializeExpiredCookie,
+  validateSettingsPatch,
 } from '../core.mjs'
 
 const ORIGIN = 'http://127.0.0.1:5173'
@@ -166,4 +169,39 @@ test('normalizeSettings fills defaults and drops invalid values', () => {
   assert.equal(normalizeSettings({ warnAt: 501 }).warnAt, DEFAULT_SETTINGS.warnAt)
   assert.equal(normalizeSettings({ warnAt: 12.5 }).warnAt, DEFAULT_SETTINGS.warnAt)
   assert.equal(normalizeSettings({ enabled: 'no' }).enabled, true)
+})
+
+test('validateSettingsPatch accepts exactly the three editable keys', () => {
+  assert.deepEqual([...EDITABLE_SETTING_KEYS].sort(), ['dryRun', 'enabled', 'warnAt'])
+  assert.deepEqual(validateSettingsPatch({ enabled: false }), { enabled: false })
+  assert.deepEqual(validateSettingsPatch({ enabled: true, dryRun: true, warnAt: 40 }), {
+    enabled: true,
+    dryRun: true,
+    warnAt: 40,
+  })
+})
+
+test('validateSettingsPatch refuses unknown keys', () => {
+  assert.throws(
+    () => validateSettingsPatch({ enabled: true, home: '/tmp' }),
+    (error) => error instanceof SettingsInputError && error.code === 'unknown-setting',
+  )
+})
+
+test('validateSettingsPatch type-checks booleans and the threshold', () => {
+  for (const body of [{ enabled: 'yes' }, { dryRun: 1 }, { warnAt: '10' }, { warnAt: 0 }, { warnAt: 501 }, { warnAt: 1.5 }]) {
+    assert.throws(
+      () => validateSettingsPatch(body),
+      (error) => error instanceof SettingsInputError && error.code.startsWith('invalid-'),
+    )
+  }
+})
+
+test('validateSettingsPatch refuses non-object and empty payloads', () => {
+  for (const body of [null, [], {}, 'x', 42]) {
+    assert.throws(
+      () => validateSettingsPatch(body),
+      (error) => error instanceof SettingsInputError,
+    )
+  }
 })

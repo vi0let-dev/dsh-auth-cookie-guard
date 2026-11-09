@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import {
   CLIENT_HEADER,
   ROUTE_PREFIX,
+  SETTINGS_PATH,
   apply,
   createHandler,
   jsonResponse,
@@ -185,10 +186,11 @@ test('jsonResponse keeps each deletion cookie on its own line', async () => {
   assert.equal(response.headers.get('cache-control'), 'no-store')
 })
 
-test('apply registers a resource route, never a handler route', () => {
+test('apply registers a resource route and an exact settings handler', () => {
   const registered = []
   const ctx = {
     logger: { info() {}, warn() {} },
+    get: () => undefined,
     inject: (dependencies, callback) => {
       callback({
         webServer: {
@@ -208,14 +210,20 @@ test('apply registers a resource route, never a handler route', () => {
 
   apply(ctx, {})
 
-  assert.equal(registered.length, 1)
-  const route = registered[0]
-  assert.equal(route.kind, 'prefix')
-  assert.equal(route.path, ROUTE_PREFIX)
-  assert.equal(typeof route.resource, 'function')
+  assert.equal(registered.length, 2)
+
+  const resourceRoute = registered.find((route) => route.kind === 'prefix')
+  assert.equal(resourceRoute.path, ROUTE_PREFIX)
+  assert.equal(typeof resourceRoute.resource, 'function')
   // A handler route is called as (req, res) and must end the response itself;
   // returning a Response there leaves the socket open forever.
-  assert.equal(route.handler, undefined)
+  assert.equal(resourceRoute.handler, undefined)
+
+  const settingsRoute = registered.find((route) => route.kind === 'exact')
+  assert.equal(settingsRoute.path, SETTINGS_PATH)
+  assert.equal(typeof settingsRoute.handler, 'function')
+  // Resources answer GET/HEAD only, so the POST settings write needs a handler.
+  assert.equal(settingsRoute.resource, undefined)
 })
 
 test('the resource answers a real HTTP request with deletion headers', async () => {

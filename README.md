@@ -29,7 +29,7 @@ Error: desktop welcome: Web authentication failed
 | 启动自动清理 | 页面每次加载后向插件路由发一次同源请求；Host 从该请求的 `Cookie` 头里读出所有 `dsh-auth-*`，**只保留当前端口那一枚**，其余用 `Set-Cookie: <name>=; Max-Age=0; Path=/` 让 Chromium 自己删除 |
 | 设置页状态 | 设置 →「认证 Cookie 守卫」：当前宿主地址、当前 Cookie 短名、上次请求携带数量与估算字节、风险分级、上次清理结果 |
 | 一键清理 | 页面上「立即清理」，立即执行一次并回显删除数量 |
-| 只读配置展示 | 自动清理开关、试运行、告警阈值当前值，便于核对 |
+| 页面内配置 | 自动清理、试运行、告警阈值可直接切换并保存（写入 profile 的 `cordis.patch.yml`） |
 | 救援脚本 | 已经 431 打不开桌面版时，退出应用后运行 `scripts/purge-auth-cookies.mjs`，备份后只删 `dsh-auth-*` 行 |
 
 **它不做什么**：不读会话内容、不写用户目录、不联网、不碰 `$DSH_HOME` 下的凭据与会话；不删除任何非 `dsh-auth-*` 的 Cookie；当前端口的 Cookie 永远保留。
@@ -70,25 +70,22 @@ node scripts/purge-auth-cookies.mjs --dry-run
 
 ## 配置
 
-配置写在 `cordis.patch.yml` 的 `config` 里，改完重启 DSH 生效：
+三个开关都可以直接在「设置 → 认证 Cookie 守卫」里改，点「保存」即生效；保存走 DSH 的 `configEditor`，写进当前 profile 的 `cordis.patch.yml`（**不是**插件包内那份），因此重启后仍然保留，也不会因为升级插件被覆盖。
 
-```yaml
-- insert:
-    - id: dsh-auth-cookie-guard
-      name: 'dsh-auth-cookie-guard'
-      config:
-        enabled: true      # 启动时自动清理
-        dryRun: false      # true = 只报告不删除，用于观察
-        warnAt: 40         # 设置页开始告警的 Cookie 条数
-```
-
-| 字段 | 类型 | 默认 | 非法值 |
+| 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `enabled` | boolean | `true` | 只认 `false` 为关闭，其余按开启 |
-| `dryRun` | boolean | `false` | 只认 `true` 为开启 |
-| `warnAt` | integer 1–500 | `40` | 回落到 40，不报错、不影响启动 |
+| `enabled` | boolean | `true` | 启动时自动清理；关掉后只保留手动「立即清理」 |
+| `dryRun` | boolean | `false` | 只报告不删除，用于观察将要清掉哪些 Cookie |
+| `warnAt` | integer 1–500 | `40` | 设置页开始变黄告警的 Cookie 条数 |
 
-设置页里这三个值是**只读**的——插件没有引入运行时配置编辑器，避免和 profile 层的 patch 语义打架。页面上的「立即清理」不受 `enabled` / `dryRun` 限制（这是显式操作）。
+页面内控件的边界：
+
+- `warnAt` 必须是 1–500 的整数，非法值会被服务端拒绝并提示，不会静默写入；
+- 保存只接受这三个键，其它字段一律 400（页面拿不到写任意配置的能力）；
+- 保存会触发该插件行重新加载，路由随之重新注册，页面随后会自动刷新状态；
+- 若某个 profile 没有提供 `configEditor`（非 Web/精简组合），页面显示"无法保存"的提示，此时仍可手改 profile 的 `cordis.patch.yml`。
+
+`cordis.patch.yml` 里的 `config` 依然有效，作为**默认值**；一旦在页面保存过，profile 层会覆盖它。页面上的「立即清理」不受 `enabled` / `dryRun` 限制（这是显式操作）。
 
 ---
 
@@ -104,7 +101,7 @@ dsh-auth-cookie-guard/
 ├── locale/{zh,en}.json             # 插件管理器显示名与描述
 ├── icon.svg                        # 原创图标
 ├── scripts/purge-auth-cookies.mjs  # 打不开时的一次性救援
-├── test/                           # 4 组测试，共 38 项
+├── test/                           # 5 组测试，共 53 项
 ├── README.md / AUDIT.md / LICENSE
 ```
 
@@ -124,6 +121,7 @@ dsh-auth-cookie-guard/
 ## 安全注意事项
 
 - 路由带两道栅栏：`Host` 必须是 loopback 字面量（防 DNS rebinding），且必须带同源自定义头 `x-dsh-auth-cookie-guard`（跨站表单无法设置）。
+- 配置写入只接受 `enabled` / `dryRun` / `warnAt` 三个键并做类型校验，通过 DSH 的 `configEditor` 落到 profile 配置层，插件不直接写文件；没有 `configEditor` 的组合会拒绝保存且不改动任何状态。
 - 当前端口的 Cookie 缺失时**整批放弃删除**，避免把正在使用的会话踢下线；设置页会显示「已跳过」提示。
 - 单次响应最多删除 180 枚（Chromium 每主机上限），剩余的在下一轮继续。
 - `dryRun` 可在不删任何东西的前提下确认解析结果。
@@ -131,7 +129,7 @@ dsh-auth-cookie-guard/
 ## 开发说明
 
 ```powershell
-# 全部测试（38 项：纯函数 / 路由 / SQLite 救援 / Client 注册）
+# 全部测试（53 项：纯函数 / 路由 / 设置保存 / SQLite 救援 / Client 注册）
 node test/run-all.mjs
 
 # 语法检查

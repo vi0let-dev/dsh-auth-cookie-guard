@@ -49,11 +49,20 @@ window.__ModuleLoader__.load({
         lastPurge: '上次清理',
         never: '本次会话尚未清理',
         lastPurgeValue: '{time} · 删除 {n} 枚',
-        settingsTitle: '配置（只读，改 cordis.patch.yml 生效）',
+        settingsTitle: '配置',
+        settingsHint: '保存后写入当前 profile 的 cordis.patch.yml，立即生效。',
         autoClean: '启动自动清理',
         dryRun: '试运行（只报告不删除）',
         warnAtLabel: '告警阈值',
-        warnAtValue: '{n} 枚',
+        warnAtUnit: '枚',
+        save: '保存',
+        saving: '保存中…',
+        saved: '配置已保存。',
+        reset: '撤销修改',
+        dirty: '有未保存的修改。',
+        invalidWarnAt: '告警阈值需要是 1–500 之间的整数。',
+        saveFailed: '保存失败：{message}',
+        editableOff: '当前 profile 没有提供 configEditor，页面内无法保存；可直接编辑 cordis.patch.yml。',
         on: '开',
         off: '关',
         refresh: '刷新',
@@ -98,11 +107,20 @@ window.__ModuleLoader__.load({
         lastPurge: 'Last purge',
         never: 'Not purged in this session',
         lastPurgeValue: '{time} · removed {n}',
-        settingsTitle: 'Configuration (read-only; edit cordis.patch.yml to change)',
+        settingsTitle: 'Configuration',
+        settingsHint: 'Saved into this profile’s cordis.patch.yml and applied immediately.',
         autoClean: 'Prune on boot',
         dryRun: 'Dry run (report only)',
         warnAtLabel: 'Warning threshold',
-        warnAtValue: '{n} cookies',
+        warnAtUnit: 'cookies',
+        save: 'Save',
+        saving: 'Saving…',
+        saved: 'Settings saved.',
+        reset: 'Discard changes',
+        dirty: 'Unsaved changes.',
+        invalidWarnAt: 'The threshold must be an integer between 1 and 500.',
+        saveFailed: 'Save failed: {message}',
+        editableOff: 'This profile provides no configEditor, so the page cannot save; edit cordis.patch.yml instead.',
         on: 'on',
         off: 'off',
         refresh: 'Refresh',
@@ -140,12 +158,15 @@ window.__ModuleLoader__.load({
     /**
      * Call the plugin's own route.
      * @param {string} pathname - route suffix, may carry a query string.
+     * @param {{ method?: string, body?: string }} [options] - method and body.
      * @returns {Promise<{ ok: boolean, status: number, data: any }>} parsed reply.
      */
-    async function request(pathname) {
+    async function request(pathname, options = {}) {
+      const hasBody = options.body !== undefined
       const response = await fetch(`${API}${pathname}`, {
-        method: 'GET',
-        headers: { ...CLIENT_HEADERS },
+        method: options.method ?? 'GET',
+        headers: hasBody ? { ...CLIENT_HEADERS, 'content-type': 'application/json' } : { ...CLIENT_HEADERS },
+        body: options.body,
         cache: 'no-store',
         credentials: 'same-origin',
       })
@@ -189,6 +210,21 @@ window.__ModuleLoader__.load({
       danger: 'var(--dsw-alias-state-error-primary)',
     }
 
+    /** One labelled control row in the settings card. */
+    const CONTROL_ROW = {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(120px, 168px) 1fr',
+      gap: 10,
+      padding: '7px 0',
+      borderTop: '1px solid var(--dsw-alias-border-l1)',
+      fontSize: 13,
+      alignItems: 'center',
+      cursor: 'pointer',
+    }
+
+    /** Secondary label inside a control row. */
+    const CONTROL_LABEL = { color: 'var(--dsw-alias-label-secondary)' }
+
     /**
      * One label/value row of the status card.
      * @param {{ label: string, value: unknown, extra?: unknown }} props - row content.
@@ -228,6 +264,10 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(null)
       const [error, setError] = useState('')
       const [note, setNote] = useState('')
+      const [draft, setDraft] = useState(null)
+      const [saving, setSaving] = useState(false)
+      const [saveError, setSaveError] = useState('')
+      const [savedNote, setSavedNote] = useState('')
 
       const load = useCallback(async () => {
         setBusy('refresh')
@@ -259,6 +299,78 @@ window.__ModuleLoader__.load({
           setBusy(null)
         }
       }, [t])
+
+      const settingsSignature = snapshot?.settings
+        ? `${String(snapshot.settings.enabled)}|${String(snapshot.settings.dryRun)}|${String(snapshot.settings.warnAt)}`
+        : ''
+
+      // Refill the draft whenever the saved settings change (first load or a
+      // successful save), without clobbering edits while the user types.
+      useEffect(() => {
+        if (!snapshot?.settings) return
+        setDraft({
+          enabled: snapshot.settings.enabled === true,
+          dryRun: snapshot.settings.dryRun === true,
+          warnAt: String(snapshot.settings.warnAt),
+        })
+      }, [settingsSignature])
+
+      const dirty =
+        draft !== null &&
+        snapshot?.settings !== undefined &&
+        (draft.enabled !== (snapshot.settings.enabled === true) ||
+          draft.dryRun !== (snapshot.settings.dryRun === true) ||
+          draft.warnAt !== String(snapshot.settings.warnAt))
+
+      const save = useCallback(async () => {
+        if (draft === null) return
+        const warnAt = Number.parseInt(draft.warnAt, 10)
+        if (!Number.isInteger(warnAt) || warnAt < 1 || warnAt > 500) {
+          setSaveError(t('invalidWarnAt'))
+          return
+        }
+        setSaving(true)
+        setSaveError('')
+        setSavedNote('')
+        try {
+          const result = await request('/settings', {
+            method: 'POST',
+            body: JSON.stringify({ enabled: draft.enabled, dryRun: draft.dryRun, warnAt }),
+          })
+          if (!result.ok || !result.data || result.data.ok !== true) {
+            throw new Error(result.data?.message ?? `HTTP ${String(result.status)}`)
+          }
+          setSavedNote(t('saved'))
+          // The save reloads this plugin row, so re-reading /status right away
+          // could race the route being registered again; use the reply instead.
+          setSnapshot((previous) =>
+            previous === null
+              ? previous
+              : {
+                  ...previous,
+                  settings: result.data.settings,
+                  editable: result.data.editable === true,
+                },
+          )
+        } catch (caught) {
+          setSaveError(
+            fill(t('saveFailed'), { message: caught instanceof Error ? caught.message : String(caught) }),
+          )
+        } finally {
+          setSaving(false)
+        }
+      }, [draft, t])
+
+      const reset = useCallback(() => {
+        if (!snapshot?.settings) return
+        setDraft({
+          enabled: snapshot.settings.enabled === true,
+          dryRun: snapshot.settings.dryRun === true,
+          warnAt: String(snapshot.settings.warnAt),
+        })
+        setSaveError('')
+        setSavedNote('')
+      }, [snapshot, t])
 
       useEffect(() => {
         load()
@@ -294,7 +406,6 @@ window.__ModuleLoader__.load({
         ]
       }, [snapshot, t, used, budget])
 
-      const settings = snapshot?.settings
       const hintKey = `riskHint${risk.charAt(0).toUpperCase()}${risk.slice(1)}`
 
       return h(
@@ -367,12 +478,83 @@ window.__ModuleLoader__.load({
           ),
         ),
 
-        settings
+        snapshot && draft
           ? h('div', { className: 'dacg-card', style: { padding: 14 } },
-              h('div', { style: { fontSize: 12, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' } }, t('settingsTitle')),
-              h(Row, { label: t('autoClean'), value: settings.enabled ? t('on') : t('off') }),
-              h(Row, { label: t('dryRun'), value: settings.dryRun ? t('on') : t('off') }),
-              h(Row, { label: t('warnAtLabel'), value: fill(t('warnAtValue'), { n: settings.warnAt }) }),
+              h('div', { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 } },
+                h('span', { style: { fontSize: 13, fontWeight: 600, color: 'var(--dsw-alias-label-primary)' } }, t('settingsTitle')),
+                dirty
+                  ? h('span', { style: { fontSize: 11, color: 'var(--dsw-alias-state-warn-primary)' } }, t('dirty'))
+                  : null,
+              ),
+              h('p', { style: { margin: '4px 0 10px', fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t('settingsHint')),
+
+              h('label', { style: CONTROL_ROW },
+                h('span', { style: CONTROL_LABEL }, t('autoClean')),
+                h('input', {
+                  type: 'checkbox',
+                  checked: draft.enabled === true,
+                  disabled: saving || snapshot.editable !== true,
+                  onChange: (event) => setDraft({ ...draft, enabled: event.target.checked }),
+                }),
+              ),
+              h('label', { style: CONTROL_ROW },
+                h('span', { style: CONTROL_LABEL }, t('dryRun')),
+                h('input', {
+                  type: 'checkbox',
+                  checked: draft.dryRun === true,
+                  disabled: saving || snapshot.editable !== true,
+                  onChange: (event) => setDraft({ ...draft, dryRun: event.target.checked }),
+                }),
+              ),
+              h('label', { style: CONTROL_ROW },
+                h('span', { style: CONTROL_LABEL }, t('warnAtLabel')),
+                h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 8 } },
+                  h('input', {
+                    type: 'number',
+                    min: 1,
+                    max: 500,
+                    value: draft.warnAt,
+                    disabled: saving || snapshot.editable !== true,
+                    onChange: (event) => setDraft({ ...draft, warnAt: event.target.value }),
+                    style: {
+                      width: 92,
+                      padding: '4px 8px',
+                      fontSize: 13,
+                      borderRadius: 'var(--dsw-radius-md)',
+                      border: '1px solid var(--dsw-alias-border-l1)',
+                      background: 'var(--dsw-alias-bg-base)',
+                      color: 'var(--dsw-alias-label-primary)',
+                    },
+                  }),
+                  h('span', { style: { fontSize: 12, color: 'var(--dsw-alias-label-tertiary)' } }, t('warnAtUnit')),
+                ),
+              ),
+
+              snapshot.editable !== true
+                ? h('p', { style: { margin: '6px 0 0', fontSize: 12, color: 'var(--dsw-alias-state-warn-primary)' } }, t('editableOff'))
+                : null,
+
+              h('div', { style: { display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' } },
+                h('button', {
+                  type: 'button',
+                  className: 'dacg-btn dacg-btn-primary',
+                  onClick: save,
+                  disabled: saving || dirty !== true || snapshot.editable !== true,
+                }, saving ? t('saving') : t('save')),
+                h('button', {
+                  type: 'button',
+                  className: 'dacg-btn dacg-btn-ghost',
+                  onClick: reset,
+                  disabled: saving || dirty !== true,
+                }, t('reset')),
+              ),
+
+              savedNote !== ''
+                ? h('p', { style: { margin: '10px 0 0', fontSize: 12, color: 'var(--dsw-alias-state-success-primary)' } }, savedNote)
+                : null,
+              saveError !== ''
+                ? h('p', { style: { margin: '10px 0 0', fontSize: 12, color: 'var(--dsw-alias-state-error-primary)' } }, saveError)
+                : null,
             )
           : null,
 

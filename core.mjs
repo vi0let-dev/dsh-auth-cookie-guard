@@ -274,3 +274,64 @@ export function normalizeSettings(raw) {
 export const __internal = {
   emptyPlan,
 }
+
+/** The only config keys this plugin lets the Settings page change. */
+export const EDITABLE_SETTING_KEYS = Object.freeze(['enabled', 'dryRun', 'warnAt'])
+
+/** Smallest and largest accepted `warnAt`. */
+export const WARN_AT_MIN = 1
+export const WARN_AT_MAX = 500
+
+/** A rejected settings payload; `code` is safe to show in a JSON error. */
+export class SettingsInputError extends Error {
+  /**
+   * @param {string} message - human-readable reason.
+   * @param {string} code - stable machine code.
+   */
+  constructor(message, code = 'invalid-settings') {
+    super(message)
+    this.name = 'SettingsInputError'
+    this.code = code
+  }
+}
+
+/**
+ * Validate a partial settings patch coming from the browser.
+ *
+ * Only the three editable keys are accepted, values are type-checked, and an
+ * empty patch is rejected: the page always sends the full trio, so an empty
+ * body means someone else is poking at the route.
+ *
+ * @param {unknown} input - parsed JSON body.
+ * @returns {{ enabled?: boolean, dryRun?: boolean, warnAt?: number }} validated patch.
+ * @throws {SettingsInputError} when the payload is not an editable settings patch.
+ */
+export function validateSettingsPatch(input) {
+  if (input === null || typeof input !== 'object' || Array.isArray(input)) {
+    throw new SettingsInputError('body must be a JSON object', 'invalid-body')
+  }
+  const patch = {}
+  for (const [key, value] of Object.entries(input)) {
+    if (!EDITABLE_SETTING_KEYS.includes(key)) {
+      throw new SettingsInputError(`unknown setting: ${key}`, 'unknown-setting')
+    }
+    if (key === 'warnAt') {
+      if (!Number.isInteger(value) || value < WARN_AT_MIN || value > WARN_AT_MAX) {
+        throw new SettingsInputError(
+          `warnAt must be an integer between ${String(WARN_AT_MIN)} and ${String(WARN_AT_MAX)}`,
+          'invalid-warn-at',
+        )
+      }
+      patch.warnAt = value
+      continue
+    }
+    if (typeof value !== 'boolean') {
+      throw new SettingsInputError(`${key} must be a boolean`, 'invalid-boolean')
+    }
+    patch[key] = value
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new SettingsInputError('no settings supplied', 'empty-patch')
+  }
+  return patch
+}
